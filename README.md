@@ -1,5 +1,3 @@
-# RBXGame
-Game script
 # Bro_broa-scripts rules
 1.You can learn code
 2.You should not copy code
