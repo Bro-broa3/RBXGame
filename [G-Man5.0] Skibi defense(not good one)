@@ -20,84 +20,13 @@ local MainTab = Window:CreateTab("Main", nil, nil)
 getgenv().autoSkip = false
 getgenv().autoFarm = false
 
--- Function to check if map voting is available
-local function canVoteMap()
-    -- Try to find vote UI or check if vote remote is available
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local events = replicatedStorage:FindFirstChild("Events")
-    
-    if events then
-        local voteForMap = events:FindFirstChild("VoteForMap")
-        local playerId = events:FindFirstChild("PlayerId")
-        
-        -- If both remotes exist, voting might be available
-        if voteForMap and playerId then
-            return true
-        end
-    end
-    
-    -- Check for vote UI in PlayerGui
-    local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        -- Look for any vote-related GUI (you may need to adjust these names)
-        for _, gui in ipairs(playerGui:GetChildren()) do
-            if gui.Name:lower():find("vote") or gui.Name:lower():find("map") then
-                return true
-            end
-        end
-    end
-    
-    return false
-end
-
--- Function to check if difficulty voting is available
-local function canVoteDifficulty()
-    -- Similar to map voting check
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local events = replicatedStorage:FindFirstChild("Events")
-    
-    if events then
-        local voteForMap = events:FindFirstChild("VoteForMap")
-        local playerId = events:FindFirstChild("PlayerId")
-        
-        if voteForMap and playerId then
-            return true
-        end
-    end
-    
-    return false
-end
-
--- Function to check if game can be started
-local function canStartGame()
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local events = replicatedStorage:FindFirstChild("Events")
-    
-    if events then
-        local beginGame = events:FindFirstChild("BeginGame")
-        if beginGame then
-            return true
-        end
-    end
-    
-    return false
-end
-
--- Function to wait until a condition is met with timeout
-local function waitForCondition(condition, timeout, checkInterval)
-    timeout = timeout or 30
-    checkInterval = checkInterval or 0.5
-    local elapsed = 0
-    
-    while elapsed < timeout do
-        if condition() then
-            return true
-        end
-        task.wait(checkInterval)
-        elapsed = elapsed + checkInterval
-    end
-    
-    return false
+-- Upgrade function (to be filled with your code)
+local function upgradeTower(towerName, level)
+    -- You'll provide the upgrade code here
+    -- For example:
+    -- local args = {towerName, level}
+    -- game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("UpgradeTower"):FireServer(unpack(args))
+    print("Upgrading", towerName, "to level", level)
 end
 
 -- Auto Skip Toggle
@@ -129,81 +58,68 @@ MainTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while getgenv().autoFarm do
-                    -- Wait for map voting to be available
-                    print("Waiting for map voting to be available...")
-                    if not waitForCondition(canVoteMap, 60) then
-                        print("Map voting timeout, retrying...")
-                        task.wait(2)
-                        continue
-                    end
+                    -- PHASE 1: Wait for lobby
+                    print("Waiting for lobby...")
+                    task.wait(3)
                     
-                    task.wait(1)
+                    -- PHASE 2: Vote for map (Toilet Base)
+                    print("Voting for Toilet Base map...")
                     
-                    -- Vote for map
-                    print("Voting for Toilet Base...")
-                    local args1 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
+                    local mapArgs1 = {"Toilet Base"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(mapArgs1))
                     end)
                     
                     task.wait(0.5)
                     
-                    local args2 = {"Toilet Base"}
+                    local mapArgs2 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(mapArgs2))
                     end)
-                    
-                    -- Wait for difficulty voting to be available
-                    print("Waiting for difficulty voting to be available...")
-                    if not waitForCondition(canVoteDifficulty, 30) then
-                        print("Difficulty voting timeout, continuing...")
-                    end
-                    
-                    task.wait(1)
-                    
-                    -- Choose difficulty
-                    print("Voting for Insane difficulty...")
-                    local args3 = {"Insane"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args3))
-                    end)
-                    
-                    task.wait(0.5)
-                    
-                    local args4 = {game:GetService("Players").LocalPlayer, "Insane"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args4))
-                    end)
-                    
-                    -- Wait for game to be startable
-                    print("Waiting for game to be ready to start...")
-                    if not waitForCondition(canStartGame, 45) then
-                        print("Game start timeout, restarting loop...")
-                        task.wait(3)
-                        continue
-                    end
                     
                     task.wait(2)
                     
-                    -- Start game
+                    -- PHASE 3: Vote for difficulty (Insane)
+                    print("Voting for Insane difficulty...")
+                    
+                    local diffArgs1 = {"Insane"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(diffArgs1))
+                    end)
+                    
+                    task.wait(0.5)
+                    
+                    local diffArgs2 = {game:GetService("Players").LocalPlayer, "Insane"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(diffArgs2))
+                    end)
+                    
+                    task.wait(3)
+                    
+                    -- PHASE 4: Wait for map to load and start game
+                    print("Waiting for map to load...")
+                    task.wait(5)
+                    
                     print("Starting game...")
                     pcall(function()
                         game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("BeginGame"):FireServer()
                     end)
                     
-                    -- Wait for game to fully load
-                    task.wait(4)
+                    -- PHASE 5: Wait for game to fully start
+                    print("Waiting for game to start...")
+                    task.wait(5)
                     
-                    -- Change game speed
-                    print("Changing game speed to 2x...")
-                    local args5 = {"2"}
+                    -- PHASE 6: Change game speed
+                    print("Setting game speed to 2x...")
+                    local speedArgs = {"2"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChangeTimeScale"):FireServer(unpack(args5))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChangeTimeScale"):FireServer(unpack(speedArgs))
                     end)
                     
                     task.wait(2)
                     
-                    -- Place first tower: Large Speaker Tv Man (1 time)
+                    -- PHASE 7: Place early tower (Large Speaker Tv Man)
+                    print("Placing Large Speaker Tv Man...")
                     local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
                     
                     local firstTowerArgs = {
@@ -211,44 +127,71 @@ MainTab:CreateToggle({
                         towerCFrame
                     }
                     
-                    print("Placing Large Speaker Tv Man...")
                     pcall(function()
                         game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(firstTowerArgs))
                     end)
                     
-                    task.wait(1)
+                    task.wait(2)
                     
-                    -- Place infinite Zombie Dark Speakerman towers (all levels)
-                    local towerLevels = {
+                    -- PHASE 8: Place and upgrade Zombie Dark Speakerman towers
+                    print("Starting Zombie Dark Speakerman placement and upgrade...")
+                    
+                    -- Place initial Zombie Dark Speakerman
+                    local zombieTowerArgs = {
                         "Zombie Dark Speakerman",
-                        "Zombie Dark Speakerman 2",
-                        "Zombie Dark Speakerman 3",
-                        "Zombie Dark Speakerman Max"
+                        towerCFrame
                     }
                     
-                    print("Starting tower placement loop...")
-                    local placementCounter = 0
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(zombieTowerArgs))
+                    end)
+                    
+                    task.wait(1)
+                    
+                    -- Upgrade Zombie Dark Speakerman through all levels
+                    -- Level 1 to Level 2
+                    print("Upgrading to Zombie Dark Speakerman 2...")
+                    upgradeTower("Zombie Dark Speakerman", 2)
+                    task.wait(1)
+                    
+                    -- Level 2 to Level 3
+                    print("Upgrading to Zombie Dark Speakerman 3...")
+                    upgradeTower("Zombie Dark Speakerman 2", 3)
+                    task.wait(1)
+                    
+                    -- Level 3 to Max
+                    print("Upgrading to Zombie Dark Speakerman Max...")
+                    upgradeTower("Zombie Dark Speakerman 3", "Max")
+                    task.wait(1)
+                    
+                    -- Continue placing more Zombie Dark Speakerman towers and upgrading them
+                    local towerCount = 1
                     
                     while getgenv().autoFarm do
-                        for _, towerName in ipairs(towerLevels) do
-                            local towerArgs = {towerName, towerCFrame}
-                            pcall(function()
-                                game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(towerArgs))
-                            end)
-                            task.wait(0.2)
-                        end
+                        -- Place new Zombie Dark Speakerman
+                        local newZombieArgs = {
+                            "Zombie Dark Speakerman",
+                            towerCFrame
+                        }
                         
-                        placementCounter = placementCounter + 1
+                        pcall(function()
+                            game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(newZombieArgs))
+                        end)
                         
-                        -- Every 50 placements, check if game is still active
-                        if placementCounter % 50 == 0 then
-                            print("Placed", placementCounter * 4, "towers total...")
-                        end
-                        
+                        towerCount = towerCount + 1
+                        print("Placed Zombie Dark Speakerman #" .. towerCount)
                         task.wait(0.5)
                         
-                        -- Optional: Add check to detect if game ended
-                        -- If game ended, break and restart the whole process
+                        -- Upgrade it to Max level
+                        upgradeTower("Zombie Dark Speakerman", 2)
+                        task.wait(0.3)
+                        upgradeTower("Zombie Dark Speakerman 2", 3)
+                        task.wait(0.3)
+                        upgradeTower("Zombie Dark Speakerman 3", "Max")
+                        task.wait(0.3)
+                        
+                        print("Upgraded Zombie Dark Speakerman #" .. towerCount .. " to Max")
+                        task.wait(1)
                     end
                 end
             end)
@@ -256,7 +199,7 @@ MainTab:CreateToggle({
     end
 })
 
--- Create a notification to show script loaded
+-- Create a notification
 Rayfield:Notify({
     Title = "Script Loaded",
     Content = "Auto Farm Script is ready!",
