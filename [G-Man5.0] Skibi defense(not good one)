@@ -28,7 +28,7 @@ local TOWERS = {
     Zombie1 = "Zombie Dark Speakerman",
     Zombie2 = "Zombie Dark Speakerman 2",
     Zombie3 = "Zombie Dark Speakerman 3",
-    ZombieMax = "Zombie Dark Speakerman Max"
+    ZombieMax = "Zombie Dark Speakerman max"  -- Fixed: lowercase "max"
 }
 
 -- Function to get player's current money from leaderstats (排行榜)
@@ -323,7 +323,7 @@ MainTab:CreateToggle({
                     
                     task.wait(2)
                     
-                    -- PHASE 7: Place Large Speaker TV Man (cost 600) - FIXED NAME
+                    -- PHASE 7: Place Large Speaker TV Man (cost 600)
                     print(string.rep("-", 40))
                     print("Placing Large Speaker TV Man (Cost: 600)...")
                     
