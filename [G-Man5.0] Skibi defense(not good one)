@@ -22,18 +22,28 @@ getgenv().autoFarm = false
 local player = game:GetService("Players").LocalPlayer
 local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
 
--- Function to get player's current money
+-- Correct tower names (case-sensitive)
+local TOWERS = {
+    LargeSpeakerTV = "Large Speaker TV Man",
+    Zombie1 = "Zombie Dark Speakerman",
+    Zombie2 = "Zombie Dark Speakerman 2",
+    Zombie3 = "Zombie Dark Speakerman 3",
+    ZombieMax = "Zombie Dark Speakerman Max"
+}
+
+-- Function to get player's current money from leaderstats (排行榜)
 local function getMoney()
-    -- Try to find money value (adjust based on actual game)
     local leaderstats = player:FindFirstChild("leaderstats")
     if leaderstats then
-        local cash = leaderstats:FindFirstChild("Cash") or leaderstats:FindFirstChild("Money") or leaderstats:FindFirstChild("Coins")
-        if cash then
-            return cash.Value
+        local money = leaderstats:FindFirstChild("Money") or 
+                      leaderstats:FindFirstChild("Cash") or 
+                      leaderstats:FindFirstChild("Coins") or
+                      leaderstats:FindFirstChild("💰")
+        if money then
+            return money.Value
         end
     end
     
-    -- Alternative: Check player stats
     local stats = player:FindFirstChild("Stats")
     if stats then
         local money = stats:FindFirstChild("Money")
@@ -42,94 +52,37 @@ local function getMoney()
         end
     end
     
-    return nil -- Money not found
+    return nil
 end
 
--- Function to check if we have enough money (estimated costs)
+-- Function to check if we have enough money
 local function hasEnoughMoney(towerName)
     local currentMoney = getMoney()
     if not currentMoney then
-        print("⚠ Cannot read money value, proceeding anyway...")
-        return true -- Proceed if can't read money
+        return true
     end
     
-    -- Estimated tower costs (adjust these based on actual game)
     local towerCosts = {
-        ["Zombie Dark Speakerman"] = 100,
-        ["Zombie Dark Speakerman 2"] = 300,
-        ["Zombie Dark Speakerman 3"] = 600,
-        ["Zombie Dark Speakerman Max"] = 1000,
-        ["Large Speaker Tv Man"] = 150
+        [TOWERS.LargeSpeakerTV] = 600,
+        [TOWERS.Zombie1] = 1250,
+        [TOWERS.Zombie2] = 3500,
+        [TOWERS.Zombie3] = 6000,
+        [TOWERS.ZombieMax] = 20000
     }
     
-    local cost = towerCosts[towerName] or 100
+    local cost = towerCosts[towerName] or 1000
     local hasMoney = currentMoney >= cost
     
     if not hasMoney then
-        print("💰 Not enough money! Need: " .. cost .. ", Have: " .. currentMoney .. " - Waiting for more...")
+        print(string.format("💰 Not enough money! Need: %d, Have: %d - Waiting...", cost, currentMoney))
     end
     
     return hasMoney
 end
 
--- Function to spawn a tower with money check
-local function spawnTower(towerName)
-    -- Check if we have enough money
-    if not hasEnoughMoney(towerName) then
-        return false
-    end
-    
-    local success, result = pcall(function()
-        return game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(towerName, towerCFrame)
-    end)
-    
-    if success then
-        local money = getMoney()
-        print("✓ Spawned: " .. towerName .. " (Money: " .. (money or "?") .. ")")
-        return true
-    else
-        print("✗ Failed to spawn: " .. towerName .. " - " .. tostring(result))
-        return false
-    end
-end
-
--- Function to upgrade zombie through levels (with money checks)
-local function upgradeZombieToMax()
-    print("  Upgrading zombie...")
-    
-    -- Spawn level 1
-    if not spawnTower("Zombie Dark Speakerman") then
-        return false
-    end
-    task.wait(0.5)
-    
-    -- Upgrade to level 2
-    if not spawnTower("Zombie Dark Speakerman 2") then
-        print("  ⚠ Not enough money for level 2, will retry later")
-        return false
-    end
-    task.wait(0.5)
-    
-    -- Upgrade to level 3
-    if not spawnTower("Zombie Dark Speakerman 3") then
-        print("  ⚠ Not enough money for level 3, will retry later")
-        return false
-    end
-    task.wait(0.5)
-    
-    -- Upgrade to Max
-    if not spawnTower("Zombie Dark Speakerman Max") then
-        print("  ⚠ Not enough money for Max level, will retry later")
-        return false
-    end
-    
-    print("  ✓ Fully upgraded to Max!")
-    return true
-end
-
 -- Function to wait for money
 local function waitForMoney(towerName, timeout)
-    timeout = timeout or 30
+    timeout = timeout or 60
     local startTime = tick()
     
     while tick() - startTime < timeout do
@@ -137,10 +90,169 @@ local function waitForMoney(towerName, timeout)
             return true
         end
         task.wait(1)
-        print("  Waiting for money to spawn " .. towerName .. "...")
     end
     
     return false
+end
+
+-- Function to check if tower placement is available
+local function canPlaceTower()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local functions = replicatedStorage:FindFirstChild("Functions")
+    
+    if functions then
+        local spawnTower = functions:FindFirstChild("SpawnTower")
+        if spawnTower then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Function to wait until tower placement is ready
+local function waitForTowerPlacement(timeout)
+    timeout = timeout or 30
+    local startTime = tick()
+    
+    print("Waiting for tower placement to become available...")
+    
+    while tick() - startTime < timeout do
+        if canPlaceTower() then
+            print("✓ Tower placement is now available!")
+            return true
+        end
+        task.wait(0.5)
+    end
+    
+    print("⚠ Timeout waiting for tower placement")
+    return false
+end
+
+-- Function to spawn a tower
+local function spawnTower(towerName, maxRetries)
+    maxRetries = maxRetries or 3
+    
+    for attempt = 1, maxRetries do
+        if not canPlaceTower() then
+            waitForTowerPlacement(5)
+        end
+        
+        if not hasEnoughMoney(towerName) then
+            waitForMoney(towerName, 30)
+            if not hasEnoughMoney(towerName) then
+                return false
+            end
+        end
+        
+        local success, result = pcall(function()
+            return game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(towerName, towerCFrame)
+        end)
+        
+        if success then
+            local money = getMoney()
+            print(string.format("✓ Spawned: %s (Money left: %d)", towerName, money or 0))
+            return true
+        else
+            print(string.format("✗ Attempt %d/%d failed for %s: %s", attempt, maxRetries, towerName, tostring(result)))
+            task.wait(1)
+        end
+    end
+    
+    return false
+end
+
+-- Function to upgrade zombie through levels
+local function upgradeZombieToMax()
+    if not spawnTower(TOWERS.Zombie1) then
+        return false
+    end
+    task.wait(0.8)
+    
+    if not spawnTower(TOWERS.Zombie2) then
+        return false
+    end
+    task.wait(0.8)
+    
+    if not spawnTower(TOWERS.Zombie3) then
+        return false
+    end
+    task.wait(0.8)
+    
+    if not spawnTower(TOWERS.ZombieMax) then
+        return false
+    end
+    
+    return true
+end
+
+-- Function to place Max level zombie directly
+local function placeMaxZombie()
+    return spawnTower(TOWERS.ZombieMax)
+end
+
+-- Function to vote for map
+local function voteForMap()
+    print("Voting for Toilet Base map...")
+    
+    for i = 1, 3 do
+        local args1 = {player, "Toilet Base"}
+        pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+        end)
+        
+        task.wait(0.3)
+        
+        local args2 = {"Toilet Base"}
+        pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+        end)
+        
+        task.wait(0.5)
+    end
+    
+    print("✓ Map vote sent for Toilet Base")
+end
+
+-- Function to vote for difficulty
+local function voteForDifficulty()
+    print("Voting for Insane difficulty...")
+    
+    for i = 1, 3 do
+        local args1 = {player, "Insane"}
+        pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+        end)
+        
+        task.wait(0.3)
+        
+        local args2 = {"Insane"}
+        pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+        end)
+        
+        task.wait(0.5)
+    end
+    
+    print("✓ Difficulty vote sent for Insane")
+end
+
+-- Function to exit and replay game
+local function exitAndReplay()
+    print("Game ended, exiting and replaying...")
+    
+    pcall(function()
+        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ExitGame"):FireServer()
+    end)
+    
+    task.wait(2)
+    
+    pcall(function()
+        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteReplay"):FireServer()
+    end)
+    
+    print("✓ Exit and replay sent")
+    task.wait(3)
 end
 
 -- Auto Skip Toggle
@@ -172,49 +284,21 @@ MainTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while getgenv().autoFarm do
+                    print(string.rep("=", 50))
                     print("=== Starting Auto Farm Cycle ===")
+                    print(string.rep("=", 50))
                     
                     -- PHASE 1: Wait for lobby
                     print("Waiting for lobby...")
                     task.wait(3)
                     
                     -- PHASE 2: Vote for map (Toilet Base)
-                    print("Voting for Toilet Base map...")
-                    
-                    local mapArgs1 = {player, "Toilet Base"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(mapArgs1))
-                    end)
-                    print("✓ Sent PlayerId vote for Toilet Base")
-                    
-                    task.wait(1)
-                    
-                    local mapArgs2 = {"Toilet Base"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(mapArgs2))
-                    end)
-                    print("✓ Sent VoteForMap for Toilet Base")
-                    
-                    task.wait(3)
+                    voteForMap()
+                    task.wait(4)
                     
                     -- PHASE 3: Vote for difficulty (Insane)
-                    print("Voting for Insane difficulty...")
-                    
-                    local diffArgs1 = {player, "Insane"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(diffArgs1))
-                    end)
-                    print("✓ Sent PlayerId vote for Insane")
-                    
-                    task.wait(1)
-                    
-                    local diffArgs2 = {"Insane"}
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(diffArgs2))
-                    end)
-                    print("✓ Sent VoteForMap for Insane")
-                    
-                    task.wait(3)
+                    voteForDifficulty()
+                    task.wait(4)
                     
                     -- PHASE 4: Start game
                     print("Starting game...")
@@ -226,6 +310,10 @@ MainTab:CreateToggle({
                     print("Waiting for game to load...")
                     task.wait(5)
                     
+                    -- Wait for tower placement to become available
+                    waitForTowerPlacement(20)
+                    task.wait(2)
+                    
                     -- PHASE 6: Change game speed
                     print("Setting game speed to 2x...")
                     local speedArgs = {"2"}
@@ -235,22 +323,43 @@ MainTab:CreateToggle({
                     
                     task.wait(2)
                     
-                    -- PHASE 7: Place Large Speaker Tv Man (early tower)
-                    print("Placing Large Speaker Tv Man...")
-                    if waitForMoney("Large Speaker Tv Man", 15) then
-                        if spawnTower("Large Speaker Tv Man") then
-                            print("✓ Large Speaker Tv Man placed successfully!")
-                        else
-                            print("⚠ Failed to place Large Speaker Tv Man")
+                    -- PHASE 7: Place Large Speaker TV Man (cost 600) - FIXED NAME
+                    print(string.rep("-", 40))
+                    print("Placing Large Speaker TV Man (Cost: 600)...")
+                    
+                    local moneyBefore = getMoney()
+                    print(string.format("💰 Current money: %d", moneyBefore or 0))
+                    
+                    local placed = false
+                    local retryCount = 0
+                    
+                    while not placed and retryCount < 10 and getgenv().autoFarm do
+                        retryCount = retryCount + 1
+                        print("Attempt " .. retryCount .. "/10 to place Large Speaker TV Man...")
+                        
+                        if waitForMoney(TOWERS.LargeSpeakerTV, 15) then
+                            placed = spawnTower(TOWERS.LargeSpeakerTV, 3)
                         end
+                        
+                        if not placed then
+                            print("  Waiting 2 seconds before retry...")
+                            task.wait(2)
+                        end
+                    end
+                    
+                    if placed then
+                        print("✓ Large Speaker TV Man placed successfully!")
                     else
-                        print("⚠ Timeout waiting for money for Large Speaker Tv Man")
+                        print("⚠ Failed to place Large Speaker TV Man, continuing with zombies...")
                     end
                     
                     task.wait(2)
                     
                     -- PHASE 8: Spam place and upgrade Zombie Dark Speakerman towers
+                    print(string.rep("=", 50))
                     print("=== Starting Zombie Dark Speakerman Farm ===")
+                    print("Costs: Level1=1250, Level2=3500, Level3=6000, Max=20000")
+                    print(string.rep("=", 50))
                     
                     local zombieCount = 0
                     local successfulUpgrades = 0
@@ -261,37 +370,55 @@ MainTab:CreateToggle({
                         print(string.rep("-", 40))
                         print("Zombie #" .. zombieCount .. " - Attempting to place and upgrade...")
                         
-                        -- Check current money before starting
-                        local currentMoney = getMoney()
-                        print("💰 Current money: " .. (currentMoney or "Unknown"))
+                        local money = getMoney()
+                        print(string.format("💰 Current money: %d", money or 0))
                         
-                        -- Try to fully upgrade one zombie
+                        if not canPlaceTower() then
+                            print("⚠ Tower placement not available, waiting...")
+                            waitForTowerPlacement(10)
+                        end
+                        
                         if upgradeZombieToMax() then
                             successfulUpgrades = successfulUpgrades + 1
-                            print("✓ Success! Total fully upgraded zombies: " .. successfulUpgrades)
-                            print("  Failed attempts: " .. failedAttempts)
-                            task.wait(1) -- Wait after successful upgrade
+                            print(string.format("✓ Success! Total fully upgraded zombies: %d", successfulUpgrades))
+                            print(string.format("  Failed attempts: %d", failedAttempts))
+                            task.wait(1)
                         else
                             failedAttempts = failedAttempts + 1
-                            print("⚠ Failed to upgrade zombie #" .. zombieCount)
-                            print("  Waiting for more money... (Failed: " .. failedAttempts .. ", Success: " .. successfulUpgrades .. ")")
-                            
-                            -- Wait longer if low on money
+                            print(string.format("⚠ Failed to upgrade zombie #%d", zombieCount))
+                            print(string.format("  Failed: %d, Success: %d", failedAttempts, successfulUpgrades))
                             task.wait(3)
                         end
                         
-                        -- Small delay between attempts
                         task.wait(0.5)
                         
-                        -- Optional: Show stats every 10 attempts
-                        if zombieCount % 10 == 0 then
+                        if zombieCount % 20 == 0 then
                             print(string.rep("=", 40))
                             print("STATS - Zombies attempted: " .. zombieCount)
                             print("STATS - Fully upgraded: " .. successfulUpgrades)
                             print("STATS - Failed: " .. failedAttempts)
+                            print("STATS - Success rate: " .. math.floor((successfulUpgrades / zombieCount) * 100) .. "%")
                             print(string.rep("=", 40))
                         end
+                        
+                        -- After 50 zombies, switch to placing Max directly for speed
+                        if zombieCount >= 50 and successfulUpgrades > 40 then
+                            print("Fast mode: Placing Max zombies directly...")
+                            for i = 1, 5 do
+                                if not getgenv().autoFarm then break end
+                                zombieCount = zombieCount + 1
+                                if placeMaxZombie() then
+                                    successfulUpgrades = successfulUpgrades + 1
+                                end
+                                task.wait(0.3)
+                            end
+                        end
                     end
+                    
+                    -- After game ends, exit and replay
+                    print("Game cycle complete, restarting...")
+                    exitAndReplay()
+                    task.wait(5)
                 end
             end)
         end
