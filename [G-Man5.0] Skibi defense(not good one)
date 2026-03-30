@@ -1,0 +1,124 @@
+-- Load Rayfield (Updated)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield', true))()
+
+-- Wait for Rayfield to load
+task.wait(1)
+
+-- Create Window
+local Window = Rayfield:CreateWindow({
+    Name = "Auto Farm Script",
+    Icon = nil,
+    LoadingTitle = "Loading Script...",
+    LoadingSubtitle = "by YourName",
+    Theme = "Default"
+})
+
+-- Main Tab
+local MainTab = Window:CreateTab("Main", nil, nil)
+
+-- Variables
+getgenv().autoSkip = false
+getgenv().autoFarm = false
+
+-- Auto Skip Toggle
+MainTab:CreateToggle({
+    Name = "Auto Skip",
+    CurrentValue = false,
+    Callback = function(Value)
+        getgenv().autoSkip = Value
+        if Value then
+            task.spawn(function()
+                while getgenv().autoSkip do
+                    local args = {"Skip"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("SkipVote"):FireServer(unpack(args))
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end
+})
+
+-- Auto Farm Toggle
+MainTab:CreateToggle({
+    Name = "Auto Farm",
+    CurrentValue = false,
+    Callback = function(Value)
+        getgenv().autoFarm = Value
+        if Value then
+            task.spawn(function()
+                while getgenv().autoFarm do
+                    -- Vote for map
+                    local args1 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+                    
+                    local args2 = {"Toilet Base"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+                    
+                    task.wait(0.5)
+                    
+                    -- Choose difficulty
+                    local args3 = {"Insane"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args3))
+                    
+                    local args4 = {game:GetService("Players").LocalPlayer, "Insane"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args4))
+                    
+                    task.wait(1)
+                    
+                    -- Start game
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("BeginGame"):FireServer()
+                    
+                    task.wait(2)
+                    
+                    -- Change game speed
+                    local args5 = {"2"}
+                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChangeTimeScale"):FireServer(unpack(args5))
+                    
+                    task.wait(1)
+                    
+                    -- Place first tower: Large Speaker Tv Man (1 time)
+                    local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
+                    
+                    local firstTowerArgs = {
+                        "Large Speaker Tv Man",
+                        towerCFrame
+                    }
+                    
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(firstTowerArgs))
+                    end)
+                    
+                    task.wait(1)
+                    
+                    -- Place infinite Zombie Dark Speakerman towers (all levels)
+                    local towerLevels = {
+                        "Zombie Dark Speakerman",
+                        "Zombie Dark Speakerman 2",
+                        "Zombie Dark Speakerman 3",
+                        "Zombie Dark Speakerman Max"
+                    }
+                    
+                    while getgenv().autoFarm do
+                        -- Place each level of Zombie Dark Speakerman
+                        for _, towerName in ipairs(towerLevels) do
+                            local towerArgs = {towerName, towerCFrame}
+                            pcall(function()
+                                game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(towerArgs))
+                            end)
+                            task.wait(0.2)
+                        end
+                        
+                        task.wait(0.5)
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- Create a notification to show script loaded
+Rayfield:Notify({
+    Title = "Script Loaded",
+    Content = "Auto Farm Script is ready!",
+    Duration = 3
+})
