@@ -94,25 +94,126 @@ local function findTower(towerName)
     return nil
 end
 
+-- Function to get all towers of a specific type
+local function getAllTowers(towerName)
+    local towers = {}
+    local towersFolder = workspace:FindFirstChild("Towers")
+    if towersFolder then
+        for _, tower in ipairs(towersFolder:GetChildren()) do
+            if tower.Name == towerName then
+                table.insert(towers, tower)
+            end
+        end
+    end
+    return towers
+end
+
 -- Function to get the current level of zombie tower
 local function getZombieLevel()
     local levels = {
-        [TOWERS.Zombie1] = 1,
-        [TOWERS.Zombie2] = 2,
+        [TOWERS.ZombieMax] = 4,
         [TOWERS.Zombie3] = 3,
-        [TOWERS.ZombieMax] = 4
+        [TOWERS.Zombie2] = 2,
+        [TOWERS.Zombie1] = 1
     }
     
     for towerName, level in pairs(levels) do
-        if findTower(towerName) then
-            return level, towerName
+        local tower = findTower(towerName)
+        if tower then
+            return level, towerName, tower
         end
     end
     
-    return 0, nil
+    return 0, nil, nil
 end
 
--- Function to spawn a tower (place new)
+-- Function to select/click a tower
+local function selectTower(tower)
+    if not tower then
+        return false
+    end
+    
+    print(string.format("  Selecting tower: %s", tower.Name))
+    
+    -- Method 1: Fire the Click event on the tower
+    local clickEvent = tower:FindFirstChild("ClickDetector")
+    if clickEvent then
+        pcall(function()
+            clickEvent:FireClick(player)
+        end)
+        task.wait(0.3)
+        return true
+    end
+    
+    -- Method 2: Look for a ClickDetector in the tower's children
+    for _, child in ipairs(tower:GetChildren()) do
+        if child:IsA("ClickDetector") then
+            pcall(function()
+                child:FireClick(player)
+            end)
+            task.wait(0.3)
+            return true
+        end
+    end
+    
+    -- Method 3: Try to find a selection remote
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    if events then
+        local selectTower = events:FindFirstChild("SelectTower") or events:FindFirstChild("TowerSelected")
+        if selectTower then
+            pcall(function()
+                selectTower:FireServer(tower)
+            end)
+            task.wait(0.3)
+            return true
+        end
+    end
+    
+    print("  ⚠ Could not find way to select tower")
+    return false
+end
+
+-- Function to upgrade selected tower
+local function upgradeSelectedTower()
+    print("  Attempting to upgrade selected tower...")
+    
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    
+    -- Try different upgrade remotes
+    local upgradeRemotes = {
+        "UpgradeTower",
+        "TowerUpgrade", 
+        "Upgrade",
+        "UpgradeUnit"
+    }
+    
+    for _, remoteName in ipairs(upgradeRemotes) do
+        if events and events:FindFirstChild(remoteName) then
+            pcall(function()
+                events[remoteName]:FireServer()
+            end)
+            task.wait(0.3)
+            return true
+        end
+        
+        local functions = replicatedStorage:FindFirstChild("Functions")
+        if functions and functions:FindFirstChild(remoteName) then
+            pcall(function()
+                functions[remoteName]:InvokeServer()
+            end)
+            task.wait(0.3)
+            return true
+        end
+    end
+    
+    -- Method 2: Try to find a UI button or something
+    print("  ⚠ Could not find upgrade remote")
+    return false
+end
+
+-- Function to place a new tower
 local function spawnTower(towerName, maxRetries)
     maxRetries = maxRetries or 3
     
@@ -131,26 +232,16 @@ local function spawnTower(towerName, maxRetries)
             return game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(towerName, towerCFrame)
         end)
         
-        -- Wait for cooldown after placement
         task.wait(2)
         
         local moneyAfter = getMoney()
         
         if success and moneyAfter and moneyAfter < moneyBefore then
-            print(string.format("  ✓ Spawned: %s (Money spent: %d, Left: %d)", towerName, moneyBefore - moneyAfter, moneyAfter))
-            
-            -- Verify tower exists in workspace
+            print(string.format("  ✓ Spawned: %s (Money spent: %d)", towerName, moneyBefore - moneyAfter))
             task.wait(1)
-            local tower = findTower(towerName)
-            if tower then
-                print(string.format("  ✓ Verified tower exists in Workspace/Towers: %s", towerName))
-            else
-                print(string.format("  ⚠ Tower not found in Workspace/Towers after spawn"))
-            end
-            
             return true
         elseif success then
-            print(string.format("  ⚠ Spawn called but money unchanged - tower may already exist or on cooldown"))
+            print(string.format("  ⚠ Spawn called but money unchanged"))
             task.wait(3)
         else
             print(string.format("  ✗ Attempt %d/%d failed: %s", attempt, maxRetries, tostring(result)))
@@ -161,41 +252,46 @@ local function spawnTower(towerName, maxRetries)
     return false
 end
 
--- Function to upgrade zombie (spawn higher level at same position)
-local function upgradeZombie(currentLevel, targetTowerName)
-    print(string.format("  Upgrading from level %d to %s...", currentLevel, targetTowerName))
+-- Function to upgrade zombie through clicking and upgrading
+local function upgradeZombieToMax()
+    local currentLevel, currentTowerName, currentTower = getZombieLevel()
     
-    if not hasEnoughMoney(targetTowerName) then
-        print(string.format("  Not enough money for %s", targetTowerName))
+    if currentLevel >= 4 then
+        print("  Zombie is already max level!")
+        return true
+    end
+    
+    print(string.format("  Current zombie level: %d (%s)", currentLevel, currentTowerName or "None"))
+    
+    if not currentTower then
+        print("  No zombie tower found to upgrade!")
         return false
     end
     
-    local moneyBefore = getMoney()
+    -- Select the tower
+    if not selectTower(currentTower) then
+        print("  Failed to select tower")
+        return false
+    end
     
-    -- Spawn the higher level tower at the same position
-    local success, result = pcall(function()
-        return game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(targetTowerName, towerCFrame)
-    end)
+    task.wait(0.5)
     
-    task.wait(2) -- Cooldown
-    
-    local moneyAfter = getMoney()
-    
-    if success and moneyAfter and moneyAfter < moneyBefore then
-        print(string.format("  ✓ Upgraded to: %s (Money spent: %d)", targetTowerName, moneyBefore - moneyAfter))
+    -- Upgrade the selected tower
+    if upgradeSelectedTower() then
+        print("  Upgrade command sent!")
+        task.wait(2)
         
-        -- Verify upgrade worked
-        task.wait(1)
-        local newTower = findTower(targetTowerName)
-        if newTower then
-            print(string.format("  ✓ Verified upgrade: %s now in Workspace/Towers", targetTowerName))
+        -- Check if upgrade worked by looking for new tower
+        local newLevel, newTowerName = getZombieLevel()
+        if newLevel > currentLevel then
+            print(string.format("  ✓ Successfully upgraded to level %d!", newLevel))
             return true
         else
-            print(string.format("  ⚠ Upgrade completed but tower not found in Workspace/Towers"))
+            print("  ⚠ Upgrade may have failed, level unchanged")
             return false
         end
     else
-        print(string.format("  ✗ Upgrade failed for %s", targetTowerName))
+        print("  Failed to upgrade")
         return false
     end
 end
@@ -364,75 +460,52 @@ MainTab:CreateToggle({
                     
                     if zombiePlaced then
                         print("✓ Level 1 zombie placed!")
-                        task.wait(2)
+                        task.wait(3)
                         
-                        -- Upgrade to level 2
-                        local upgraded = false
+                        -- Upgrade to max
+                        local maxLevel = false
                         local upgradeAttempts = 0
                         
-                        while getgenv().autoFarm and not upgraded do
+                        while getgenv().autoFarm and not maxLevel do
                             upgradeAttempts = upgradeAttempts + 1
                             print(string.rep("-", 30))
                             print("Upgrade attempt #" .. upgradeAttempts)
                             
-                            local currentLevel, currentTower = getZombieLevel()
-                            print(string.format("Current zombie level: %d (%s)", currentLevel, currentTower or "None"))
+                            local currentLevel = getZombieLevel()
+                            print(string.format("Current zombie level: %d", currentLevel))
                             
                             local money = getMoney()
                             print(string.format("💰 Current money: %d", money or 0))
                             
-                            if currentLevel == 1 then
-                                -- Upgrade to level 2
-                                if hasEnoughMoney(TOWERS.Zombie2) then
-                                    if upgradeZombie(1, TOWERS.Zombie2) then
-                                        print("✓ Upgraded to level 2!")
-                                        task.wait(2)
-                                    else
-                                        print("  Upgrade failed, waiting...")
-                                        task.wait(5)
-                                    end
+                            if currentLevel >= 4 then
+                                print("✓✓✓ ZOMBIE FULLY UPGRADED TO MAX! ✓✓✓")
+                                maxLevel = true
+                                break
+                            end
+                            
+                            -- Check if we have enough money for next upgrade
+                            local nextLevel = currentLevel + 1
+                            local nextTowerName = nil
+                            
+                            if nextLevel == 2 then
+                                nextTowerName = TOWERS.Zombie2
+                            elseif nextLevel == 3 then
+                                nextTowerName = TOWERS.Zombie3
+                            elseif nextLevel == 4 then
+                                nextTowerName = TOWERS.ZombieMax
+                            end
+                            
+                            if nextTowerName and hasEnoughMoney(nextTowerName) then
+                                if upgradeZombieToMax() then
+                                    print("  Upgrade successful!")
+                                    task.wait(2)
                                 else
-                                    print("  Need 3500 for level 2, waiting for money...")
-                                    waitForMoney(TOWERS.Zombie2, 30)
+                                    print("  Upgrade failed, retrying...")
+                                    task.wait(3)
                                 end
-                                
-                            elseif currentLevel == 2 then
-                                -- Upgrade to level 3
-                                if hasEnoughMoney(TOWERS.Zombie3) then
-                                    if upgradeZombie(2, TOWERS.Zombie3) then
-                                        print("✓ Upgraded to level 3!")
-                                        task.wait(2)
-                                    else
-                                        print("  Upgrade failed, waiting...")
-                                        task.wait(5)
-                                    end
-                                else
-                                    print("  Need 6000 for level 3, waiting for money...")
-                                    waitForMoney(TOWERS.Zombie3, 30)
-                                end
-                                
-                            elseif currentLevel == 3 then
-                                -- Upgrade to max
-                                if hasEnoughMoney(TOWERS.ZombieMax) then
-                                    if upgradeZombie(3, TOWERS.ZombieMax) then
-                                        print("✓✓✓ ZOMBIE FULLY UPGRADED TO MAX! ✓✓✓")
-                                        upgraded = true
-                                    else
-                                        print("  Upgrade to max failed, waiting...")
-                                        task.wait(5)
-                                    end
-                                else
-                                    print("  Need 20000 for max level, waiting for money...")
-                                    waitForMoney(TOWERS.ZombieMax, 60)
-                                end
-                                
-                            elseif currentLevel == 4 then
-                                print("✓ Zombie is already max level!")
-                                upgraded = true
                             else
-                                print("  No zombie found, placing new one...")
-                                spawnTower(TOWERS.Zombie1, 3)
-                                task.wait(3)
+                                print(string.format("  Need %d for next level, waiting for money...", TOWER_COSTS[nextTowerName]))
+                                waitForMoney(nextTowerName, 60)
                             end
                             
                             task.wait(2)
