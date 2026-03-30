@@ -20,6 +20,86 @@ local MainTab = Window:CreateTab("Main", nil, nil)
 getgenv().autoSkip = false
 getgenv().autoFarm = false
 
+-- Function to check if map voting is available
+local function canVoteMap()
+    -- Try to find vote UI or check if vote remote is available
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    
+    if events then
+        local voteForMap = events:FindFirstChild("VoteForMap")
+        local playerId = events:FindFirstChild("PlayerId")
+        
+        -- If both remotes exist, voting might be available
+        if voteForMap and playerId then
+            return true
+        end
+    end
+    
+    -- Check for vote UI in PlayerGui
+    local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        -- Look for any vote-related GUI (you may need to adjust these names)
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui.Name:lower():find("vote") or gui.Name:lower():find("map") then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Function to check if difficulty voting is available
+local function canVoteDifficulty()
+    -- Similar to map voting check
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    
+    if events then
+        local voteForMap = events:FindFirstChild("VoteForMap")
+        local playerId = events:FindFirstChild("PlayerId")
+        
+        if voteForMap and playerId then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Function to check if game can be started
+local function canStartGame()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    
+    if events then
+        local beginGame = events:FindFirstChild("BeginGame")
+        if beginGame then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Function to wait until a condition is met with timeout
+local function waitForCondition(condition, timeout, checkInterval)
+    timeout = timeout or 30
+    checkInterval = checkInterval or 0.5
+    local elapsed = 0
+    
+    while elapsed < timeout do
+        if condition() then
+            return true
+        end
+        task.wait(checkInterval)
+        elapsed = elapsed + checkInterval
+    end
+    
+    return false
+end
+
 -- Auto Skip Toggle
 MainTab:CreateToggle({
     Name = "Auto Skip",
@@ -29,9 +109,11 @@ MainTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while getgenv().autoSkip do
-                    local args = {"Skip"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("SkipVote"):FireServer(unpack(args))
-                    task.wait(0.5)
+                    pcall(function()
+                        local args = {"Skip"}
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("SkipVote"):FireServer(unpack(args))
+                    end)
+                    task.wait(1)
                 end
             end)
         end
@@ -47,34 +129,79 @@ MainTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while getgenv().autoFarm do
-                    -- Vote for map
-                    local args1 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+                    -- Wait for map voting to be available
+                    print("Waiting for map voting to be available...")
+                    if not waitForCondition(canVoteMap, 60) then
+                        print("Map voting timeout, retrying...")
+                        task.wait(2)
+                        continue
+                    end
                     
-                    local args2 = {"Toilet Base"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+                    task.wait(1)
+                    
+                    -- Vote for map
+                    print("Voting for Toilet Base...")
+                    local args1 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args1))
+                    end)
                     
                     task.wait(0.5)
                     
-                    -- Choose difficulty
-                    local args3 = {"Insane"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args3))
+                    local args2 = {"Toilet Base"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args2))
+                    end)
                     
-                    local args4 = {game:GetService("Players").LocalPlayer, "Insane"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args4))
+                    -- Wait for difficulty voting to be available
+                    print("Waiting for difficulty voting to be available...")
+                    if not waitForCondition(canVoteDifficulty, 30) then
+                        print("Difficulty voting timeout, continuing...")
+                    end
                     
                     task.wait(1)
                     
-                    -- Start game
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("BeginGame"):FireServer()
+                    -- Choose difficulty
+                    print("Voting for Insane difficulty...")
+                    local args3 = {"Insane"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(args3))
+                    end)
+                    
+                    task.wait(0.5)
+                    
+                    local args4 = {game:GetService("Players").LocalPlayer, "Insane"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(args4))
+                    end)
+                    
+                    -- Wait for game to be startable
+                    print("Waiting for game to be ready to start...")
+                    if not waitForCondition(canStartGame, 45) then
+                        print("Game start timeout, restarting loop...")
+                        task.wait(3)
+                        continue
+                    end
                     
                     task.wait(2)
                     
-                    -- Change game speed
-                    local args5 = {"2"}
-                    game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChangeTimeScale"):FireServer(unpack(args5))
+                    -- Start game
+                    print("Starting game...")
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("BeginGame"):FireServer()
+                    end)
                     
-                    task.wait(1)
+                    -- Wait for game to fully load
+                    task.wait(4)
+                    
+                    -- Change game speed
+                    print("Changing game speed to 2x...")
+                    local args5 = {"2"}
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ChangeTimeScale"):FireServer(unpack(args5))
+                    end)
+                    
+                    task.wait(2)
                     
                     -- Place first tower: Large Speaker Tv Man (1 time)
                     local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
@@ -84,6 +211,7 @@ MainTab:CreateToggle({
                         towerCFrame
                     }
                     
+                    print("Placing Large Speaker Tv Man...")
                     pcall(function()
                         game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(firstTowerArgs))
                     end)
@@ -98,8 +226,10 @@ MainTab:CreateToggle({
                         "Zombie Dark Speakerman Max"
                     }
                     
+                    print("Starting tower placement loop...")
+                    local placementCounter = 0
+                    
                     while getgenv().autoFarm do
-                        -- Place each level of Zombie Dark Speakerman
                         for _, towerName in ipairs(towerLevels) do
                             local towerArgs = {towerName, towerCFrame}
                             pcall(function()
@@ -108,7 +238,17 @@ MainTab:CreateToggle({
                             task.wait(0.2)
                         end
                         
+                        placementCounter = placementCounter + 1
+                        
+                        -- Every 50 placements, check if game is still active
+                        if placementCounter % 50 == 0 then
+                            print("Placed", placementCounter * 4, "towers total...")
+                        end
+                        
                         task.wait(0.5)
+                        
+                        -- Optional: Add check to detect if game ended
+                        -- If game ended, break and restart the whole process
                     end
                 end
             end)
