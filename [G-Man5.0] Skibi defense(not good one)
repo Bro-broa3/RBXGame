@@ -94,20 +94,6 @@ local function findTower(towerName)
     return nil
 end
 
--- Function to get all towers of a specific type
-local function getAllTowers(towerName)
-    local towers = {}
-    local towersFolder = workspace:FindFirstChild("Towers")
-    if towersFolder then
-        for _, tower in ipairs(towersFolder:GetChildren()) do
-            if tower.Name == towerName then
-                table.insert(towers, tower)
-            end
-        end
-    end
-    return towers
-end
-
 -- Function to get the current level of zombie tower
 local function getZombieLevel()
     local levels = {
@@ -127,26 +113,26 @@ local function getZombieLevel()
     return 0, nil, nil
 end
 
--- Function to select/click a tower
+-- Function to select/click a tower (first click)
 local function selectTower(tower)
     if not tower then
         return false
     end
     
-    print(string.format("  Selecting tower: %s", tower.Name))
+    print(string.format("  [Click 1] Selecting tower: %s", tower.Name))
     
-    -- Method 1: Fire the Click event on the tower
-    local clickEvent = tower:FindFirstChild("ClickDetector")
-    if clickEvent then
+    -- Try to fire ClickDetector on the tower
+    local clickDetector = tower:FindFirstChildOfClass("ClickDetector")
+    if clickDetector then
         pcall(function()
-            clickEvent:FireClick(player)
+            clickDetector:FireClick(player)
         end)
         task.wait(0.3)
         return true
     end
     
-    -- Method 2: Look for a ClickDetector in the tower's children
-    for _, child in ipairs(tower:GetChildren()) do
+    -- Try to find any ClickDetector in children
+    for _, child in ipairs(tower:GetDescendants()) do
         if child:IsA("ClickDetector") then
             pcall(function()
                 child:FireClick(player)
@@ -156,64 +142,75 @@ local function selectTower(tower)
         end
     end
     
-    -- Method 3: Try to find a selection remote
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local events = replicatedStorage:FindFirstChild("Events")
-    if events then
-        local selectTower = events:FindFirstChild("SelectTower") or events:FindFirstChild("TowerSelected")
-        if selectTower then
-            pcall(function()
-                selectTower:FireServer(tower)
-            end)
-            task.wait(0.3)
-            return true
-        end
-    end
-    
-    print("  ⚠ Could not find way to select tower")
+    print("  ⚠ Could not find ClickDetector on tower")
     return false
 end
 
--- Function to upgrade selected tower
-local function upgradeSelectedTower()
-    print("  Attempting to upgrade selected tower...")
+-- Function to click upgrade (second click) - this should trigger the spawn of higher level tower
+local function clickUpgrade()
+    print("  [Click 2] Attempting to upgrade...")
     
-    local replicatedStorage = game:GetService("ReplicatedStorage")
-    local events = replicatedStorage:FindFirstChild("Events")
-    
-    -- Try different upgrade remotes
-    local upgradeRemotes = {
-        "UpgradeTower",
-        "TowerUpgrade", 
-        "Upgrade",
-        "UpgradeUnit"
-    }
-    
-    for _, remoteName in ipairs(upgradeRemotes) do
-        if events and events:FindFirstChild(remoteName) then
-            pcall(function()
-                events[remoteName]:FireServer()
-            end)
-            task.wait(0.3)
-            return true
+    -- Try to find the upgrade button in the UI
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        -- Look for upgrade button in GUI
+        local upgradeButton = nil
+        
+        -- Search through all GUI elements for upgrade-related buttons
+        local function searchGui(gui)
+            for _, child in ipairs(gui:GetChildren()) do
+                if child:IsA("TextButton") or child:IsA("ImageButton") then
+                    local name = child.Name:lower()
+                    if name:find("upgrade") or name:find("level") or name:find("evolve") then
+                        upgradeButton = child
+                        return true
+                    end
+                end
+                if searchGui(child) then
+                    return true
+                end
+            end
+            return false
         end
         
-        local functions = replicatedStorage:FindFirstChild("Functions")
-        if functions and functions:FindFirstChild(remoteName) then
+        searchGui(playerGui)
+        
+        if upgradeButton then
             pcall(function()
-                functions[remoteName]:InvokeServer()
+                upgradeButton:FireClick()
+                upgradeButton:FireMouseButton1Click()
             end)
             task.wait(0.3)
+            print("  ✓ Clicked upgrade button in GUI")
             return true
         end
     end
     
-    -- Method 2: Try to find a UI button or something
-    print("  ⚠ Could not find upgrade remote")
+    -- Alternative: Try to fire an upgrade remote
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local events = replicatedStorage:FindFirstChild("Events")
+    
+    if events then
+        -- Try different upgrade remote names
+        local upgradeRemotes = {"UpgradeTower", "TowerUpgrade", "Upgrade", "UpgradeUnit"}
+        for _, remoteName in ipairs(upgradeRemotes) do
+            local remote = events:FindFirstChild(remoteName)
+            if remote then
+                pcall(function()
+                    remote:FireServer()
+                end)
+                task.wait(0.3)
+                print(string.format("  ✓ Fired upgrade remote: %s", remoteName))
+                return true
+            end
+        end
+    end
+    
+    print("  ⚠ Could not find upgrade button or remote")
     return false
 end
 
--- Function to place a new tower
+-- Function to spawn a tower (for placing new towers)
 local function spawnTower(towerName, maxRetries)
     maxRetries = maxRetries or 3
     
@@ -241,19 +238,19 @@ local function spawnTower(towerName, maxRetries)
             task.wait(1)
             return true
         elseif success then
-            print(string.format("  ⚠ Spawn called but money unchanged"))
-            task.wait(3)
+            print(string.format("  ⚠ Spawn called but money unchanged - tower may already exist"))
+            task.wait(2)
         else
             print(string.format("  ✗ Attempt %d/%d failed: %s", attempt, maxRetries, tostring(result)))
-            task.wait(3)
+            task.wait(2)
         end
     end
     
     return false
 end
 
--- Function to upgrade zombie through clicking and upgrading
-local function upgradeZombieToMax()
+-- Function to upgrade zombie using click-select and click-upgrade method
+local function upgradeZombie()
     local currentLevel, currentTowerName, currentTower = getZombieLevel()
     
     if currentLevel >= 4 then
@@ -268,7 +265,24 @@ local function upgradeZombieToMax()
         return false
     end
     
-    -- Select the tower
+    -- Check if we have enough money for next level
+    local nextLevel = currentLevel + 1
+    local nextTowerName = nil
+    
+    if nextLevel == 2 then
+        nextTowerName = TOWERS.Zombie2
+    elseif nextLevel == 3 then
+        nextTowerName = TOWERS.Zombie3
+    elseif nextLevel == 4 then
+        nextTowerName = TOWERS.ZombieMax
+    end
+    
+    if nextTowerName and not hasEnoughMoney(nextTowerName) then
+        print(string.format("  Not enough money for %s (Cost: %d)", nextTowerName, TOWER_COSTS[nextTowerName]))
+        return false
+    end
+    
+    -- Step 1: Click to select the tower
     if not selectTower(currentTower) then
         print("  Failed to select tower")
         return false
@@ -276,22 +290,22 @@ local function upgradeZombieToMax()
     
     task.wait(0.5)
     
-    -- Upgrade the selected tower
-    if upgradeSelectedTower() then
-        print("  Upgrade command sent!")
-        task.wait(2)
-        
-        -- Check if upgrade worked by looking for new tower
-        local newLevel, newTowerName = getZombieLevel()
-        if newLevel > currentLevel then
-            print(string.format("  ✓ Successfully upgraded to level %d!", newLevel))
-            return true
-        else
-            print("  ⚠ Upgrade may have failed, level unchanged")
-            return false
-        end
+    -- Step 2: Click upgrade button (this should trigger the spawn of higher level tower)
+    if not clickUpgrade() then
+        print("  Failed to click upgrade")
+        return false
+    end
+    
+    task.wait(2)
+    
+    -- Step 3: Verify upgrade worked by checking if tower level increased
+    local newLevel, newTowerName = getZombieLevel()
+    
+    if newLevel > currentLevel then
+        print(string.format("  ✓ Successfully upgraded to level %d (%s)!", newLevel, newTowerName))
+        return true
     else
-        print("  Failed to upgrade")
+        print(string.format("  ⚠ Upgrade may have failed - still at level %d", currentLevel))
         return false
     end
 end
@@ -452,6 +466,7 @@ MainTab:CreateToggle({
                     -- PHASE 8: Place and upgrade Zombie Dark Speakerman
                     print(string.rep("=", 50))
                     print("=== Placing and Upgrading Zombie Dark Speakerman ===")
+                    print("Method: Click tower (select) -> Click upgrade button (spawn higher level)")
                     print(string.rep("=", 50))
                     
                     -- Place level 1 zombie
@@ -462,7 +477,7 @@ MainTab:CreateToggle({
                         print("✓ Level 1 zombie placed!")
                         task.wait(3)
                         
-                        -- Upgrade to max
+                        -- Upgrade to max using click-select and click-upgrade
                         local maxLevel = false
                         local upgradeAttempts = 0
                         
@@ -483,32 +498,16 @@ MainTab:CreateToggle({
                                 break
                             end
                             
-                            -- Check if we have enough money for next upgrade
-                            local nextLevel = currentLevel + 1
-                            local nextTowerName = nil
-                            
-                            if nextLevel == 2 then
-                                nextTowerName = TOWERS.Zombie2
-                            elseif nextLevel == 3 then
-                                nextTowerName = TOWERS.Zombie3
-                            elseif nextLevel == 4 then
-                                nextTowerName = TOWERS.ZombieMax
-                            end
-                            
-                            if nextTowerName and hasEnoughMoney(nextTowerName) then
-                                if upgradeZombieToMax() then
-                                    print("  Upgrade successful!")
-                                    task.wait(2)
-                                else
-                                    print("  Upgrade failed, retrying...")
-                                    task.wait(3)
-                                end
+                            -- Attempt to upgrade
+                            if upgradeZombie() then
+                                print("  Upgrade successful! Waiting for next upgrade...")
+                                task.wait(2)
                             else
-                                print(string.format("  Need %d for next level, waiting for money...", TOWER_COSTS[nextTowerName]))
-                                waitForMoney(nextTowerName, 60)
+                                print("  Upgrade failed, waiting...")
+                                task.wait(3)
                             end
                             
-                            task.wait(2)
+                            task.wait(1)
                         end
                         
                         -- Keep farming until game ends
