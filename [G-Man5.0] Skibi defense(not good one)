@@ -20,7 +20,6 @@ local MainTab = Window:CreateTab("Main", nil, nil)
 getgenv().autoSkip = false
 getgenv().autoFarm = false
 local player = game:GetService("Players").LocalPlayer
-local mouse = player:GetMouse()
 local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
 
 -- Correct tower names (case-sensitive)
@@ -95,6 +94,34 @@ local function findTower(towerName)
     return nil
 end
 
+-- Function to get the position of a tower (Model)
+local function getTowerPosition(tower)
+    if not tower then
+        return nil
+    end
+    
+    -- Try to get PrimaryPart
+    if tower:IsA("Model") then
+        if tower.PrimaryPart then
+            return tower.PrimaryPart.Position
+        end
+        
+        -- Find any part in the model
+        for _, child in ipairs(tower:GetChildren()) do
+            if child:IsA("BasePart") then
+                return child.Position
+            end
+        end
+    end
+    
+    -- If it's a part directly
+    if tower:IsA("BasePart") then
+        return tower.Position
+    end
+    
+    return nil
+end
+
 -- Function to get the current level of zombie tower
 local function getZombieLevel()
     local levels = {
@@ -123,19 +150,29 @@ local function clickOnTower(tower)
     print(string.format("  Clicking on tower: %s", tower.Name))
     
     -- Get the tower's position
-    local position = tower.Position
-    local screenPoint = nil
-    
-    -- Try to get screen position
-    local camera = workspace.CurrentCamera
-    if camera then
-        screenPoint = camera:WorldToScreenPoint(position)
+    local position = getTowerPosition(tower)
+    if not position then
+        print("  ⚠ Could not get tower position")
+        return false
     end
     
-    if screenPoint then
-        -- Method 1: Simulate mouse click at screen position
-        local x, y = screenPoint.X, screenPoint.Y
-        
+    -- Get screen position
+    local camera = workspace.CurrentCamera
+    if not camera then
+        print("  ⚠ No camera found")
+        return false
+    end
+    
+    local screenPoint = camera:WorldToScreenPoint(position)
+    if not screenPoint then
+        print("  ⚠ Could not convert to screen coordinates")
+        return false
+    end
+    
+    local x, y = screenPoint.X, screenPoint.Y
+    
+    -- Simulate mouse click at screen position
+    pcall(function()
         -- Create mouse event
         local mouseEvent = {
             x = x,
@@ -143,41 +180,13 @@ local function clickOnTower(tower)
             UserInputType = Enum.UserInputType.MouseButton1
         }
         
-        pcall(function()
-            -- Fire click on the tower
-            game:GetService("UserInputService"):MouseButton1Click(mouseEvent)
-        end)
-        
-        task.wait(0.2)
-        print(string.format("  ✓ Clicked at position: %.0f, %.0f", x, y))
-        return true
-    else
-        -- Method 2: Use fireclickdetector on the tower
-        local clickDetector = tower:FindFirstChildOfClass("ClickDetector")
-        if clickDetector then
-            pcall(function()
-                clickDetector:FireClick(player)
-            end)
-            task.wait(0.2)
-            print("  ✓ Fired ClickDetector")
-            return true
-        end
-        
-        -- Method 3: Try to find any click detector in descendants
-        for _, child in ipairs(tower:GetDescendants()) do
-            if child:IsA("ClickDetector") then
-                pcall(function()
-                    child:FireClick(player)
-                end)
-                task.wait(0.2)
-                print("  ✓ Fired ClickDetector from child")
-                return true
-            end
-        end
-        
-        print("  ⚠ Could not click on tower")
-        return false
-    end
+        -- Fire the click
+        game:GetService("UserInputService"):MouseButton1Click(mouseEvent)
+    end)
+    
+    task.wait(0.3)
+    print(string.format("  ✓ Clicked at position: %.0f, %.0f", x, y))
+    return true
 end
 
 -- Function to click upgrade button in UI
