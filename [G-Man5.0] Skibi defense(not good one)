@@ -19,14 +19,128 @@ local MainTab = Window:CreateTab("Main", nil, nil)
 -- Variables
 getgenv().autoSkip = false
 getgenv().autoFarm = false
+local player = game:GetService("Players").LocalPlayer
+local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
 
--- Upgrade function (to be filled with your code)
-local function upgradeTower(towerName, level)
-    -- You'll provide the upgrade code here
-    -- For example:
-    -- local args = {towerName, level}
-    -- game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("UpgradeTower"):FireServer(unpack(args))
-    print("Upgrading", towerName, "to level", level)
+-- Function to get player's current money
+local function getMoney()
+    -- Try to find money value (adjust based on actual game)
+    local leaderstats = player:FindFirstChild("leaderstats")
+    if leaderstats then
+        local cash = leaderstats:FindFirstChild("Cash") or leaderstats:FindFirstChild("Money") or leaderstats:FindFirstChild("Coins")
+        if cash then
+            return cash.Value
+        end
+    end
+    
+    -- Alternative: Check player stats
+    local stats = player:FindFirstChild("Stats")
+    if stats then
+        local money = stats:FindFirstChild("Money")
+        if money then
+            return money.Value
+        end
+    end
+    
+    return nil -- Money not found
+end
+
+-- Function to check if we have enough money (estimated costs)
+local function hasEnoughMoney(towerName)
+    local currentMoney = getMoney()
+    if not currentMoney then
+        print("⚠ Cannot read money value, proceeding anyway...")
+        return true -- Proceed if can't read money
+    end
+    
+    -- Estimated tower costs (adjust these based on actual game)
+    local towerCosts = {
+        ["Zombie Dark Speakerman"] = 100,
+        ["Zombie Dark Speakerman 2"] = 300,
+        ["Zombie Dark Speakerman 3"] = 600,
+        ["Zombie Dark Speakerman Max"] = 1000,
+        ["Large Speaker Tv Man"] = 150
+    }
+    
+    local cost = towerCosts[towerName] or 100
+    local hasMoney = currentMoney >= cost
+    
+    if not hasMoney then
+        print("💰 Not enough money! Need: " .. cost .. ", Have: " .. currentMoney .. " - Waiting for more...")
+    end
+    
+    return hasMoney
+end
+
+-- Function to spawn a tower with money check
+local function spawnTower(towerName)
+    -- Check if we have enough money
+    if not hasEnoughMoney(towerName) then
+        return false
+    end
+    
+    local success, result = pcall(function()
+        return game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(towerName, towerCFrame)
+    end)
+    
+    if success then
+        local money = getMoney()
+        print("✓ Spawned: " .. towerName .. " (Money: " .. (money or "?") .. ")")
+        return true
+    else
+        print("✗ Failed to spawn: " .. towerName .. " - " .. tostring(result))
+        return false
+    end
+end
+
+-- Function to upgrade zombie through levels (with money checks)
+local function upgradeZombieToMax()
+    print("  Upgrading zombie...")
+    
+    -- Spawn level 1
+    if not spawnTower("Zombie Dark Speakerman") then
+        return false
+    end
+    task.wait(0.5)
+    
+    -- Upgrade to level 2
+    if not spawnTower("Zombie Dark Speakerman 2") then
+        print("  ⚠ Not enough money for level 2, will retry later")
+        return false
+    end
+    task.wait(0.5)
+    
+    -- Upgrade to level 3
+    if not spawnTower("Zombie Dark Speakerman 3") then
+        print("  ⚠ Not enough money for level 3, will retry later")
+        return false
+    end
+    task.wait(0.5)
+    
+    -- Upgrade to Max
+    if not spawnTower("Zombie Dark Speakerman Max") then
+        print("  ⚠ Not enough money for Max level, will retry later")
+        return false
+    end
+    
+    print("  ✓ Fully upgraded to Max!")
+    return true
+end
+
+-- Function to wait for money
+local function waitForMoney(towerName, timeout)
+    timeout = timeout or 30
+    local startTime = tick()
+    
+    while tick() - startTime < timeout do
+        if hasEnoughMoney(towerName) then
+            return true
+        end
+        task.wait(1)
+        print("  Waiting for money to spawn " .. towerName .. "...")
+    end
+    
+    return false
 end
 
 -- Auto Skip Toggle
@@ -58,6 +172,8 @@ MainTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while getgenv().autoFarm do
+                    print("=== Starting Auto Farm Cycle ===")
+                    
                     -- PHASE 1: Wait for lobby
                     print("Waiting for lobby...")
                     task.wait(3)
@@ -65,48 +181,49 @@ MainTab:CreateToggle({
                     -- PHASE 2: Vote for map (Toilet Base)
                     print("Voting for Toilet Base map...")
                     
-                    local mapArgs1 = {"Toilet Base"}
+                    local mapArgs1 = {player, "Toilet Base"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(mapArgs1))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(mapArgs1))
                     end)
+                    print("✓ Sent PlayerId vote for Toilet Base")
                     
-                    task.wait(0.5)
+                    task.wait(1)
                     
-                    local mapArgs2 = {game:GetService("Players").LocalPlayer, "Toilet Base"}
+                    local mapArgs2 = {"Toilet Base"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(mapArgs2))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(mapArgs2))
                     end)
+                    print("✓ Sent VoteForMap for Toilet Base")
                     
-                    task.wait(2)
+                    task.wait(3)
                     
                     -- PHASE 3: Vote for difficulty (Insane)
                     print("Voting for Insane difficulty...")
                     
-                    local diffArgs1 = {"Insane"}
+                    local diffArgs1 = {player, "Insane"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(diffArgs1))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(diffArgs1))
                     end)
+                    print("✓ Sent PlayerId vote for Insane")
                     
-                    task.wait(0.5)
+                    task.wait(1)
                     
-                    local diffArgs2 = {game:GetService("Players").LocalPlayer, "Insane"}
+                    local diffArgs2 = {"Insane"}
                     pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("PlayerId"):FireServer(unpack(diffArgs2))
+                        game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("VoteForMap"):FireServer(unpack(diffArgs2))
                     end)
+                    print("✓ Sent VoteForMap for Insane")
                     
                     task.wait(3)
                     
-                    -- PHASE 4: Wait for map to load and start game
-                    print("Waiting for map to load...")
-                    task.wait(5)
-                    
+                    -- PHASE 4: Start game
                     print("Starting game...")
                     pcall(function()
                         game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("BeginGame"):FireServer()
                     end)
                     
                     -- PHASE 5: Wait for game to fully start
-                    print("Waiting for game to start...")
+                    print("Waiting for game to load...")
                     task.wait(5)
                     
                     -- PHASE 6: Change game speed
@@ -118,80 +235,62 @@ MainTab:CreateToggle({
                     
                     task.wait(2)
                     
-                    -- PHASE 7: Place early tower (Large Speaker Tv Man)
+                    -- PHASE 7: Place Large Speaker Tv Man (early tower)
                     print("Placing Large Speaker Tv Man...")
-                    local towerCFrame = CFrame.new(-88.6019515991211, 3.1293256282806396, 33.49143600463867, 1, -0.0000018196407154391636, -0.00003965427094954066, 0.0000018200940985479974, 1, 0.000011433176950959023, 0.00003965424912166782, -0.000011433248801040463, 1)
-                    
-                    local firstTowerArgs = {
-                        "Large Speaker Tv Man",
-                        towerCFrame
-                    }
-                    
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(firstTowerArgs))
-                    end)
+                    if waitForMoney("Large Speaker Tv Man", 15) then
+                        if spawnTower("Large Speaker Tv Man") then
+                            print("✓ Large Speaker Tv Man placed successfully!")
+                        else
+                            print("⚠ Failed to place Large Speaker Tv Man")
+                        end
+                    else
+                        print("⚠ Timeout waiting for money for Large Speaker Tv Man")
+                    end
                     
                     task.wait(2)
                     
-                    -- PHASE 8: Place and upgrade Zombie Dark Speakerman towers
-                    print("Starting Zombie Dark Speakerman placement and upgrade...")
+                    -- PHASE 8: Spam place and upgrade Zombie Dark Speakerman towers
+                    print("=== Starting Zombie Dark Speakerman Farm ===")
                     
-                    -- Place initial Zombie Dark Speakerman
-                    local zombieTowerArgs = {
-                        "Zombie Dark Speakerman",
-                        towerCFrame
-                    }
-                    
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(zombieTowerArgs))
-                    end)
-                    
-                    task.wait(1)
-                    
-                    -- Upgrade Zombie Dark Speakerman through all levels
-                    -- Level 1 to Level 2
-                    print("Upgrading to Zombie Dark Speakerman 2...")
-                    upgradeTower("Zombie Dark Speakerman", 2)
-                    task.wait(1)
-                    
-                    -- Level 2 to Level 3
-                    print("Upgrading to Zombie Dark Speakerman 3...")
-                    upgradeTower("Zombie Dark Speakerman 2", 3)
-                    task.wait(1)
-                    
-                    -- Level 3 to Max
-                    print("Upgrading to Zombie Dark Speakerman Max...")
-                    upgradeTower("Zombie Dark Speakerman 3", "Max")
-                    task.wait(1)
-                    
-                    -- Continue placing more Zombie Dark Speakerman towers and upgrading them
-                    local towerCount = 1
+                    local zombieCount = 0
+                    local successfulUpgrades = 0
+                    local failedAttempts = 0
                     
                     while getgenv().autoFarm do
-                        -- Place new Zombie Dark Speakerman
-                        local newZombieArgs = {
-                            "Zombie Dark Speakerman",
-                            towerCFrame
-                        }
+                        zombieCount = zombieCount + 1
+                        print(string.rep("-", 40))
+                        print("Zombie #" .. zombieCount .. " - Attempting to place and upgrade...")
                         
-                        pcall(function()
-                            game:GetService("ReplicatedStorage"):WaitForChild("Functions"):WaitForChild("SpawnTower"):InvokeServer(unpack(newZombieArgs))
-                        end)
+                        -- Check current money before starting
+                        local currentMoney = getMoney()
+                        print("💰 Current money: " .. (currentMoney or "Unknown"))
                         
-                        towerCount = towerCount + 1
-                        print("Placed Zombie Dark Speakerman #" .. towerCount)
+                        -- Try to fully upgrade one zombie
+                        if upgradeZombieToMax() then
+                            successfulUpgrades = successfulUpgrades + 1
+                            print("✓ Success! Total fully upgraded zombies: " .. successfulUpgrades)
+                            print("  Failed attempts: " .. failedAttempts)
+                            task.wait(1) -- Wait after successful upgrade
+                        else
+                            failedAttempts = failedAttempts + 1
+                            print("⚠ Failed to upgrade zombie #" .. zombieCount)
+                            print("  Waiting for more money... (Failed: " .. failedAttempts .. ", Success: " .. successfulUpgrades .. ")")
+                            
+                            -- Wait longer if low on money
+                            task.wait(3)
+                        end
+                        
+                        -- Small delay between attempts
                         task.wait(0.5)
                         
-                        -- Upgrade it to Max level
-                        upgradeTower("Zombie Dark Speakerman", 2)
-                        task.wait(0.3)
-                        upgradeTower("Zombie Dark Speakerman 2", 3)
-                        task.wait(0.3)
-                        upgradeTower("Zombie Dark Speakerman 3", "Max")
-                        task.wait(0.3)
-                        
-                        print("Upgraded Zombie Dark Speakerman #" .. towerCount .. " to Max")
-                        task.wait(1)
+                        -- Optional: Show stats every 10 attempts
+                        if zombieCount % 10 == 0 then
+                            print(string.rep("=", 40))
+                            print("STATS - Zombies attempted: " .. zombieCount)
+                            print("STATS - Fully upgraded: " .. successfulUpgrades)
+                            print("STATS - Failed: " .. failedAttempts)
+                            print(string.rep("=", 40))
+                        end
                     end
                 end
             end)
