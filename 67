@@ -1,0 +1,109 @@
+-- Kill Aura Configuration
+getgenv().KillAuraSettings = {
+    Enabled = true,
+    Range = true, -- Maximum distance to target
+    TeamCheck = flase, -- Don't attack teammates
+    WallCheck = true, -- Don't attack through walls (set true if you want)
+    AutoEquip = true, -- Auto-equip tool if not holding weapon
+}
+
+-- Kill Aura Main Function
+local function GetNearestPlayer()
+    local LocalPlayer = game:GetService("Players").LocalPlayer
+    local LocalCharacter = LocalPlayer.Character
+    if not LocalCharacter then return nil end
+    
+    local HumanoidRootPart = LocalCharacter:FindFirstChild("HumanoidRootPart")
+    if not HumanoidRootPart then return nil end
+    
+    local NearestPlayer = nil
+    local ShortestDistance = getgenv().KillAuraSettings.Range
+    
+    for _, Player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if Player ~= LocalPlayer then
+            local Character = Player.Character
+            if Character then
+                -- Team check
+                if getgenv().KillAuraSettings.TeamCheck and Player.Team == LocalPlayer.Team then
+                    continue
+                end
+                
+                local TargetRoot = Character:FindFirstChild("HumanoidRootPart")
+                local Humanoid = Character:FindFirstChild("Humanoid")
+                
+                if TargetRoot and Humanoid and Humanoid.Health > 0 then
+                    -- Wall check
+                    if getgenv().KillAuraSettings.WallCheck then
+                        local Ray = Ray.new(HumanoidRootPart.Position, (TargetRoot.Position - HumanoidRootPart.Position).Unit * getgenv().KillAuraSettings.Range)
+                        local Hit, Position = workspace:FindPartOnRay(Ray, LocalCharacter)
+                        if Hit and Hit:IsDescendantOf(Character) then
+                            -- Clear line of sight
+                        else
+                            continue -- Wall blocking
+                        end
+                    end
+                    
+                    local Distance = (HumanoidRootPart.Position - TargetRoot.Position).Magnitude
+                    if Distance < ShortestDistance then
+                        ShortestDistance = Distance
+                        NearestPlayer = Player
+                    end
+                end
+            end
+        end
+    end
+    
+    return NearestPlayer
+end
+
+-- Auto-equip tool
+local function EquipTool()
+    local LocalPlayer = game:GetService("Players").LocalPlayer
+    local Character = LocalPlayer.Character
+    if not Character then return end
+    
+    local Tool = Character:FindFirstChildOfClass("Tool")
+    if Tool then
+        if not Tool.Parent then
+            LocalPlayer.Backpack:FindFirstChildOfClass("Tool").Parent = Character
+        end
+    else
+        -- Equip first tool from backpack
+        local BackpackTool = LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+        if BackpackTool then
+            BackpackTool.Parent = Character
+        end
+    end
+end
+
+-- Main loop
+task.spawn(function()
+    while task.wait() do
+        if getgenv().KillAuraSettings.Enabled then
+            local Target = GetNearestPlayer()
+            if Target then
+                local LocalPlayer = game:GetService("Players").LocalPlayer
+                local Character = LocalPlayer.Character
+                if Character then
+                    -- Auto equip if enabled
+                    if getgenv().KillAuraSettings.AutoEquip then
+                        EquipTool()
+                    end
+                    
+                    -- Different hit methods (uncomment the one that works for your game)
+                    -- Method 1: Direct remote fire
+                    local Event = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes").PunchHit
+                    if Event then
+                        Event:FireServer(Target)
+                    end
+                    
+                    -- Method 2: Using remote from character
+                    -- local Remote = Character:FindFirstChild("PunchRemote")
+                    -- if Remote then
+                    --     Remote:FireServer(Target)
+                    -- end
+                end
+            end
+        end
+    end
+end)
