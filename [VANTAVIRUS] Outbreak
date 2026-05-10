@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-    Name = "DNA Farmer",
+    Name = "INF DNA",
     LoadingTitle = "Loading...",
-    LoadingSubtitle = "by Script",
+    LoadingSubtitle = "by Bro_broa3",
     ConfigurationSaving = {
        Enabled = false
     }
