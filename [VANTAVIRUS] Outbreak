@@ -1,0 +1,34 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "DNA Farmer",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "by Script",
+    ConfigurationSaving = {
+       Enabled = false
+    }
+})
+
+local MainTab = Window:CreateTab("Main", "home")
+
+local Toggle = MainTab:CreateToggle({
+    Name = "Inf DNA",
+    CurrentValue = false,
+    Flag = "InfDNAToggle",
+    Callback = function(Value)
+        getgenv().farm = Value
+        
+        if Value then
+            task.spawn(function()
+                while getgenv().farm do
+                    task.wait()
+                    local Event = game:GetService("ReplicatedStorage").Packages._Index["sleitnick_knit@1.5.3"].knit.Services.BubbleService.RF.BubbleReward
+                    Event:InvokeServer(
+                        workspace.Countries.China,
+                        "Red"
+                    )
+                end
+            end)
+        end
+    end
+})
